@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-registry
+  namespace: registry-system
+  labels:
+    app: local-registry
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: local-registry
+  template:
+    metadata:
+      labels:
+        app: local-registry
+    spec:
+      nodeName: 172.16.0.46
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: registry
+          image: docker.m.daocloud.io/library/registry:2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: registry
+              containerPort: 5000
+              protocol: TCP
+          env:
+            - name: REGISTRY_AUTH
+              value: htpasswd
+            - name: REGISTRY_AUTH_HTPASSWD_REALM
+              value: TokenInfra Registry
+            - name: REGISTRY_AUTH_HTPASSWD_PATH
+              value: /auth/htpasswd
+            - name: REGISTRY_HTTP_RELATIVEURLS
+              value: "true"
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: registry-data
+              mountPath: /var/lib/registry
+            - name: registry-auth
+              mountPath: /auth
+              readOnly: true
+      volumes:
+        - name: registry-data
+          hostPath:
+            path: /var/lib/tokeninfra-registry
+            type: DirectoryOrCreate
+        - name: registry-auth
+          secret:
+            secretName: local-registry-auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: local-registry
+  namespace: registry-system
+  annotations:
+    service.beta.kubernetes.io/volcengine-loadbalancer-protocol-port: "HTTP:5000"
+    service.beta.kubernetes.io/volcengine-loadbalancer-keepalive-timeout: "900"
+    service.beta.kubernetes.io/volcengine-loadbalancer-client-header-timeout: "120"
+    service.beta.kubernetes.io/volcengine-loadbalancer-client-body-timeout: "120"
+    service.beta.kubernetes.io/volcengine-loadbalancer-send-timeout: "1300"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-read-timeout: "3600"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-send-timeout: "3600"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-connect-timeout: "120"
+spec:
+  type: LoadBalancer
+  selector:
+    app: local-registry
+  ports:
+    - name: registry
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: local-registry-config
+  namespace: registry-system
+spec:
+  selector:
+    matchLabels:
+      app: local-registry-config
+  template:
+    metadata:
+      labels:
+        app: local-registry-config
+    spec:
+      hostNetwork: true
+      containers:
+        - name: config
+          image: docker.m.daocloud.io/library/alpine:3.20
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              AUTH=$(printf '%s:%s' "$REGISTRY_USERNAME" "$REGISTRY_PASSWORD" | base64 | tr -d '\n')
+              mkdir -p /host-certs/172.16.0.46:5000
+              printf 'server = "http://172.16.0.46:5000"\n\n[host."http://172.16.0.46:5000"]\n  capabilities = ["pull", "resolve"]\n  skip_verify = true\n[host."http://172.16.0.46:5000".header]\n  Authorization = ["Basic %s"]\n' "$AUTH" > /host-certs/172.16.0.46:5000/hosts.toml
+              sleep infinity
+          env:
+            - name: REGISTRY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: local-registry-auth
+                  key: username
+            - name: REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: local-registry-auth
+                  key: password
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: certs
+              mountPath: /host-certs
+      volumes:
+        - name: certs
+          hostPath:
+            path: /etc/containerd/certs.d
+            type: DirectoryOrCreate

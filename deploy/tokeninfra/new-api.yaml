@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: new-api
+  namespace: new-api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: new-api
+  template:
+    metadata:
+      labels:
+        app: new-api
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - 172.16.0.46
+                      - 172.16.0.47
+                      - 172.16.0.62
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: new-api
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: new-api
+          image: 172.16.0.46:5000/new-api:tokeninfra-20260916-billing-detail-tab-v2
+          imagePullPolicy: Always
+          args:
+            - --log-dir
+            - /app/logs
+          env:
+            - name: REDIS_CONN_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: new-api-runtime
+                  key: redis-conn-string
+            - name: TZ
+              value: Asia/Shanghai
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: new-api-runtime
+                  key: session-secret
+            - name: SQL_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: new-api-runtime
+                  key: sql-dsn
+            - name: ERROR_LOG_ENABLED
+              value: "true"
+            - name: NODE_NAME
+              value: tokeninfra
+            - name: TRUSTED_PROXIES
+              value: none
+            - name: RELAY_TIMEOUT
+              value: "3600"
+            - name: STREAMING_TIMEOUT
+              value: "3600"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "2800m"
+              memory: 3Gi
+            limits:
+              cpu: "7"
+              memory: 12Gi
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          hostPath:
+            path: /var/log/new-api
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-api
+  namespace: new-api
+  annotations:
+    service.beta.kubernetes.io/volcengine-loadbalancer-id: "clb-gidgc4stkmbk512lqwazm4oe"
+    service.beta.kubernetes.io/volcengine-loadbalancer-protocol-port: "HTTP:80"
+    service.beta.kubernetes.io/volcengine-loadbalancer-keepalive-timeout: "900"
+    service.beta.kubernetes.io/volcengine-loadbalancer-client-header-timeout: "120"
+    service.beta.kubernetes.io/volcengine-loadbalancer-client-body-timeout: "120"
+    service.beta.kubernetes.io/volcengine-loadbalancer-send-timeout: "1300"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-read-timeout: "3600"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-send-timeout: "3600"
+    service.beta.kubernetes.io/volcengine-loadbalancer-proxy-connect-timeout: "120"
+spec:
+  type: LoadBalancer
+  selector:
+    app: new-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

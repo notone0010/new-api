@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="36" viewBox="0 0 360 72">
+  <title>TokenInfra</title>
+  <path fill="#00BF88" d="M4 55 28 21Q32 15 38 15H44Q50 15 54 21L78 55H60L41 28 22 55ZM30 55 41 40 52 55Z"/>
+  <text x="90" y="54" font-family="Arial,Helvetica,sans-serif" font-size="44" font-weight="700" letter-spacing="-1.5" fill="#20272E">Token<tspan fill="#00BF88">Infra</tspan></text>
+</svg>
