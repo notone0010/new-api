@@ -94,6 +94,10 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
+	if claudeResponse.Id != "" {
+		c.Set(common.ResponseIdKey, claudeResponse.Id)
+		claudeInfo.Usage.ResponseID = claudeResponse.Id
+	}
 	if claudeResponse.StopReason != "" {
 		maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	}
@@ -407,6 +411,15 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
 	logger.LogDebug(c, "responseBody: %s", responseBody)
+	// Preserve the provider response ID before any protocol conversion can
+	// synthesize a gateway chat completion ID.
+	var rawResponse struct {
+		ID string `json:"id"`
+	}
+	if common.Unmarshal(responseBody, &rawResponse) == nil && rawResponse.ID != "" {
+		c.Set(common.ResponseIdKey, rawResponse.ID)
+		claudeInfo.Usage.ResponseID = rawResponse.ID
+	}
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
 		return nil, handleErr
