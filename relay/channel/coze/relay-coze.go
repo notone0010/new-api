@@ -63,13 +63,22 @@ func cozeChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Res
 	if cozeResponse.Code != 0 {
 		return nil, types.NewError(errors.New(cozeResponse.Msg), types.ErrorCodeBadResponseBody)
 	}
+	for _, data := range cozeResponse.Data {
+		if data.Id != "" {
+			c.Set(common.ResponseIdKey, data.Id)
+			break
+		}
+	}
 	// 从上下文获取 usage
 	var usage dto.Usage
 	usage.PromptTokens = c.GetInt("coze_input_count")
 	usage.CompletionTokens = c.GetInt("coze_output_count")
 	usage.TotalTokens = c.GetInt("coze_token_count")
 	response.Usage = usage
-	response.Id = helper.GetResponseID(c)
+	response.Id = c.GetString(common.ResponseIdKey)
+	if response.Id == "" {
+		response.Id = helper.GetResponseID(c)
+	}
 
 	var responseContent json.RawMessage
 	for _, data := range cozeResponse.Data {
