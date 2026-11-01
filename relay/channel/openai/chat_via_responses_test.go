@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -67,6 +68,8 @@ func TestOaiResponsesToChatStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {
 	require.Equal(t, 2, usage.PromptTokens)
 	require.Equal(t, 3, usage.CompletionTokens)
 	require.Equal(t, 5, usage.TotalTokens)
+	require.Equal(t, "resp_1", usage.ResponseID)
+	require.Equal(t, "resp_1", c.GetString(common.ResponseIdKey))
 
 	got := recorder.Body.String()
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
@@ -151,7 +154,7 @@ func TestOaiResponsesToChatBufferedStreamHandlerReturnsJSONFromSSE(t *testing.T)
 		`data: {"type":"response.output_text.delta","delta":"buffered text"}`,
 		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup"}}`,
 		`data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"q\":\"x\"}"}`,
-		`data: {"type":"response.done","response":{"model":"gpt-test","status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
+		`data: {"type":"response.done","response":{"id":"resp_buffered","model":"gpt-test","status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
 		`data: [DONE]`,
 		``,
 	}, "\n")
@@ -162,6 +165,8 @@ func TestOaiResponsesToChatBufferedStreamHandlerReturnsJSONFromSSE(t *testing.T)
 	require.Nil(t, err)
 	require.NotNil(t, usage)
 	require.Equal(t, 3, usage.TotalTokens)
+	require.Equal(t, "resp_buffered", usage.ResponseID)
+	require.Equal(t, "resp_buffered", c.GetString(common.ResponseIdKey))
 
 	got := recorder.Body.String()
 	require.NotContains(t, got, `data:`)
@@ -245,6 +250,8 @@ func TestOaiChatToResponsesStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {
 	require.Equal(t, 2, usage.PromptTokens)
 	require.Equal(t, 3, usage.CompletionTokens)
 	require.Equal(t, 5, usage.TotalTokens)
+	require.Equal(t, "chatcmpl_1", usage.ResponseID)
+	require.Equal(t, "chatcmpl_1", c.GetString(common.ResponseIdKey))
 
 	got := recorder.Body.String()
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
@@ -266,6 +273,37 @@ func TestOaiChatToResponsesStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {
 		`event: response.function_call_arguments.done`,
 		`event: response.completed`,
 	)
+}
+
+func TestOaiStreamHandlerPreservesResponseIDWhenLastChunkOmitsIt(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"id":"chatcmpl_real","object":"chat.completion.chunk","created":1710000000,"model":"gpt-test","choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":null}]}`,
+		`data: {"object":"chat.completion.chunk","created":1710000000,"model":"gpt-test","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	c, _, resp, info := newResponsesChatTestContext(t, body, true)
+	info.RelayMode = relayconstant.RelayModeChatCompletions
+
+	usage, apiErr := OaiStreamHandler(c, info, resp)
+	require.Nil(t, apiErr)
+	require.Equal(t, "chatcmpl_real", usage.ResponseID)
+	require.Equal(t, "chatcmpl_real", c.GetString(common.ResponseIdKey))
+}
+
+func TestOpenaiHandlerRecordsNonStreamResponseID(t *testing.T) {
+	body := `{"id":"chatcmpl_nonstream","object":"chat.completion","created":1710000000,"model":"gpt-test","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`
+	c, _, resp, info := newResponsesChatTestContext(t, body, false)
+	info.RelayMode = relayconstant.RelayModeChatCompletions
+
+	usage, apiErr := OpenaiHandler(c, info, resp)
+	require.Nil(t, apiErr)
+	require.Equal(t, "chatcmpl_nonstream", usage.ResponseID)
+	require.Equal(t, "chatcmpl_nonstream", c.GetString(common.ResponseIdKey))
 }
 
 func requireOrderedSubstrings(t *testing.T, s string, parts ...string) {

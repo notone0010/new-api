@@ -60,6 +60,7 @@ function makeLog(other: LogOtherData): UsageLog {
     ip: '',
     other: JSON.stringify(other),
     request_id: 'req-1',
+    response_id: 'resp-1',
     upstream_request_id: '',
   }
 }
@@ -106,6 +107,16 @@ describe('usage facts billing details', () => {
       queryClient.clear()
     }
     queryClients.length = 0
+  })
+
+  test('renders the response id when present', () => {
+    queryClients.push(
+      renderDetails({
+        group_ratio: 1,
+      })
+    )
+
+    expect(rowValue('Response ID')).toBe('resp-1')
   })
 
   test('renders one raw-key row per usage fact before total cost', () => {

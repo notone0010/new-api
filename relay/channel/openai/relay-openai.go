@@ -133,6 +133,12 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 				secondLastStreamData = lastStreamData
 			}
 
+			var streamResponse struct {
+				ID string `json:"id"`
+			}
+			if err := common.UnmarshalJsonStr(data, &streamResponse); err == nil && streamResponse.ID != "" {
+				responseId = streamResponse.ID
+			}
 			lastStreamData = data
 			collectStreamFunctionCallNames(data, seenStreamToolCalls, &streamFunctionCallNames)
 			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
@@ -190,9 +196,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
-	if responseId != "" {
-		c.Set(common.ResponseIdKey, responseId)
-	}
+	helper.RecordResponseID(c, usage, responseId)
 
 	return usage, nil
 }

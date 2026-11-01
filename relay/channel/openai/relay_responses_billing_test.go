@@ -113,6 +113,7 @@ func TestOaiResponsesHandlerCountsCompletedImageGenerationOutputs(t *testing.T) 
 	gin.SetMode(gin.TestMode)
 
 	body, err := common.Marshal(dto.OpenAIResponsesResponse{
+		ID:     "resp_nonstream",
 		Status: []byte(`"completed"`),
 		Output: []dto.ResponsesOutput{
 			{
@@ -148,11 +149,13 @@ func TestOaiResponsesHandlerCountsCompletedImageGenerationOutputs(t *testing.T) 
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 	}
 
-	_, apiErr := OaiResponsesHandler(c, info, resp)
+	usage, apiErr := OaiResponsesHandler(c, info, resp)
 	require.Nil(t, apiErr)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
 	assert.Equal(t, 2, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 	assert.False(t, c.GetBool("image_generation_call"))
+	assert.Equal(t, "resp_nonstream", usage.ResponseID)
+	assert.Equal(t, "resp_nonstream", c.GetString(common.ResponseIdKey))
 }
 
 func TestOaiResponsesHandlerIncompleteStatusCommitsZeroImageGeneration(t *testing.T) {
@@ -194,7 +197,7 @@ func TestOaiResponsesHandlerIncompleteStatusCommitsZeroImageGeneration(t *testin
 	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
-func runResponsesImageBillingStream(t *testing.T, events ...string) *relaycommon.RelayInfo {
+func runResponsesImageBillingStream(t *testing.T, events ...string) (*gin.Context, *relaycommon.RelayInfo, *dto.Usage) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	oldTimeout := constant.StreamingTimeout
@@ -228,16 +231,16 @@ func runResponsesImageBillingStream(t *testing.T, events ...string) *relaycommon
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 	}
 
-	_, apiErr := OaiResponsesStreamHandler(c, info, resp)
+	usage, apiErr := OaiResponsesStreamHandler(c, info, resp)
 	require.Nil(t, apiErr)
 	require.NotNil(t, info.ResponsesUsageInfo)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
-	return info
+	return c, info, usage
 }
 
 func TestOaiResponsesStreamHandlerDeduplicatesCompletedImageOutput(t *testing.T) {
 	item := `{"type":"image_generation_call","id":"img_1","call_id":"call_1","status":"completed","result":"base64-a"}`
-	info := runResponsesImageBillingStream(
+	_, info, _ := runResponsesImageBillingStream(
 		t,
 		`{"type":"response.output_item.done","output_index":0,"item":`+item+`}`,
 		`{"type":"response.completed","response":{"status":"completed","output":[`+item+`],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
@@ -247,7 +250,7 @@ func TestOaiResponsesStreamHandlerDeduplicatesCompletedImageOutput(t *testing.T)
 }
 
 func TestOaiResponsesStreamHandlerDiscardsImageOutputOnIncomplete(t *testing.T) {
-	info := runResponsesImageBillingStream(
+	_, info, _ := runResponsesImageBillingStream(
 		t,
 		`{"type":"response.output_item.done","output_index":0,"item":{"type":"image_generation_call","id":"img_1","status":"completed","result":"base64-a"}}`,
 		`{"type":"response.incomplete","response":{"status":"incomplete"}}`,
@@ -256,8 +259,32 @@ func TestOaiResponsesStreamHandlerDiscardsImageOutputOnIncomplete(t *testing.T) 
 	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
+func TestOaiResponsesStreamHandlerBillsUsageOnIncomplete(t *testing.T) {
+	_, _, usage := runResponsesImageBillingStream(
+		t,
+		`{"type":"response.output_item.done","output_index":0,"item":{"type":"image_generation_call","id":"img_1","status":"completed","result":"base64-a"}}`,
+		`{"type":"response.incomplete","response":{"status":"incomplete","output":[],"usage":{"input_tokens":50,"output_tokens":96,"total_tokens":146,"output_tokens_details":{"reasoning_tokens":96}}}}`,
+	)
+
+	assert.Equal(t, 50, usage.PromptTokens)
+	assert.Equal(t, 96, usage.CompletionTokens)
+	assert.Equal(t, 146, usage.TotalTokens)
+}
+
+func TestOaiResponsesStreamHandlerRecordsResponseID(t *testing.T) {
+	c, _, usage := runResponsesImageBillingStream(
+		t,
+		`{"type":"response.output_item.done","output_index":0,"item":{"type":"image_generation_call","id":"img_1","status":"completed","result":"base64-a"}}`,
+		`{"type":"response.created","response":{"id":"resp_stream","status":"in_progress"}}`,
+		`{"type":"response.incomplete","response":{"status":"incomplete","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+	)
+
+	assert.Equal(t, "resp_stream", usage.ResponseID)
+	assert.Equal(t, "resp_stream", c.GetString(common.ResponseIdKey))
+}
+
 func TestOaiResponsesStreamHandlerDoesNotCountPartialImageEvent(t *testing.T) {
-	info := runResponsesImageBillingStream(
+	_, info, _ := runResponsesImageBillingStream(
 		t,
 		`{"type":"response.image_generation_call.partial_image","output_index":0,"partial_image_b64":"partial-bytes"}`,
 		`{"type":"response.completed","response":{"status":"completed","output":[]}}`,

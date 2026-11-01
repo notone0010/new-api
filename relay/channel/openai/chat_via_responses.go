@@ -62,6 +62,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 
 	accumulator := relayconvert.NewResponsesBufferedAccumulator()
 	var finalResponse *dto.OpenAIResponsesResponse
+	var responseID string
 	var streamErr *types.NewAPIError
 
 	scanner := helper.NewStreamScanner(resp.Body)
@@ -85,6 +86,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 			logger.LogError(c, "failed to unmarshal buffered responses stream event: "+err.Error())
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			break
+		}
+		if streamResp.Response != nil && streamResp.Response.ID != "" {
+			responseID = streamResp.Response.ID
 		}
 		accumulator.ProcessEvent(&streamResp)
 		switch streamResp.Type {
@@ -117,13 +121,18 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	if err := scanner.Err(); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
+	if responseID == "" {
+		responseID = helper.GetResponseID(c)
+	}
 	if finalResponse == nil {
 		finalResponse = &dto.OpenAIResponsesResponse{
-			ID:        helper.GetResponseID(c),
+			ID:        responseID,
 			CreatedAt: int(time.Now().Unix()),
 			Model:     info.UpstreamModelName,
 			Status:    []byte(`"completed"`),
 		}
+	} else if finalResponse.ID == "" {
+		finalResponse.ID = responseID
 	}
 	accumulator.SupplementResponseOutput(finalResponse)
 
@@ -141,8 +150,8 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 }
 
 func convertResponsesResponseForClient(c *gin.Context, info *relaycommon.RelayInfo, response *dto.OpenAIResponsesResponse) (any, *dto.Usage, error) {
-	if responseID := helper.GetResponseID(c); responseID != "" {
-		response.ID = responseID
+	if response.ID == "" {
+		response.ID = helper.GetResponseID(c)
 	}
 
 	usage := relayconvert.UsageFromResponsesUsage(response.Usage)
@@ -159,6 +168,7 @@ func convertResponsesResponseForClient(c *gin.Context, info *relaycommon.RelayIn
 	if result.Usage != nil && result.Usage.TotalTokens != 0 {
 		usage = result.Usage
 	}
+	helper.RecordResponseID(c, usage, response.ID)
 	return result.Value, usage, nil
 }
 
@@ -256,6 +266,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			sr.Error(err)
 			return
 		}
+		if streamResp.Response != nil && streamResp.Response.ID != "" {
+			responseId = streamResp.Response.ID
+		}
 
 		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" {
 			if streamResp.Response != nil {
@@ -315,5 +328,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatOpenAI {
 		helper.Done(c)
 	}
+	helper.RecordResponseID(c, usage, responseId)
 	return usage, nil
 }

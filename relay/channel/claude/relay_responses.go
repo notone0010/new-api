@@ -106,6 +106,11 @@ func ClaudeResponsesStreamHandler(c *gin.Context, resp *http.Response, info *rel
 			return
 		}
 
+		upstreamResponseID := claudeResponse.Id
+		if claudeResponse.Message != nil && claudeResponse.Message.Id != "" {
+			upstreamResponseID = claudeResponse.Message.Id
+		}
+		helper.RecordResponseID(c, claudeInfo.Usage, upstreamResponseID)
 		if claudeResponse.StopReason != "" {
 			maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 		}
