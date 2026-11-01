@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
 import { buttonVariants } from '@/components/ui/button'
-import { TOKENINFRA_PYTHON_EXAMPLE } from '@/features/home/components/tokeninfra-developers'
+import { tokeninfraPythonExample } from '@/features/home/lib/code-samples'
 import { useStatus } from '@/hooks/use-status'
 
 export function QuickStartContent(props: { apiBaseUrl: string }) {
@@ -98,7 +98,7 @@ export function QuickStartContent(props: { apiBaseUrl: string }) {
             aria-label={t('API example')}
             className='overflow-x-auto rounded-xl bg-slate-900 p-5 text-xs leading-7 text-blue-100 sm:text-sm'
           >
-            <code>{TOKENINFRA_PYTHON_EXAMPLE}</code>
+            <code>{tokeninfraPythonExample(props.apiBaseUrl)}</code>
           </pre>
           <p className='text-muted-foreground mt-5 text-sm leading-7'>
             {t(

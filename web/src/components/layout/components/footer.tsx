@@ -22,6 +22,8 @@ import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
+import { useTheme } from '@/context/theme-provider'
+import { DEFAULT_LOGO, DEFAULT_LOGO_DARK } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 import { CompanyFooterDetails } from './company-footer-details'
@@ -125,8 +127,13 @@ export function Footer(props: FooterProps) {
     footerHtml,
     demoSiteEnabled,
   } = useSystemConfig()
+  const { resolvedTheme } = useTheme()
 
   const displayLogo = systemLogo || props.logo || '/logo.png'
+  const themedLogo =
+    displayLogo === DEFAULT_LOGO && resolvedTheme === 'dark'
+      ? DEFAULT_LOGO_DARK
+      : displayLogo
   const displayName = systemName || props.name || 'New API'
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
@@ -239,7 +246,7 @@ export function Footer(props: FooterProps) {
           <div className='shrink-0'>
             <Link to='/' className='group flex items-center gap-2.5'>
               <img
-                src={displayLogo}
+                src={themedLogo}
                 alt={displayName}
                 className='size-7 rounded-lg object-contain'
               />

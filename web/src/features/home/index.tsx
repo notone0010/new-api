@@ -24,6 +24,7 @@ import { Footer } from '@/components/layout/components/footer'
 import { RichContent } from '@/components/rich-content'
 import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { TokenInfraLanding } from './components/tokeninfra-landing'
@@ -121,14 +122,12 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
-      <TokenInfraLanding
-        isAuthenticated={isAuthenticated}
-        // Upstream project documentation remains available at https://docs.newapi.pro.
-        // This company homepage links to our own quick start.
-        docsUrl='/docs'
-      />
-      <Footer />
+    <PublicLayout
+      className={cn('ti-shell', resolvedTheme)}
+      showMainContainer={false}
+    >
+      <TokenInfraLanding isAuthenticated={isAuthenticated} />
+      <Footer className='ti-footer' />
     </PublicLayout>
   )
 }

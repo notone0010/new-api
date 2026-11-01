@@ -33,11 +33,9 @@ import zh from '@/i18n/locales/zh.json'
 
 import { TokenInfraLanding } from '../components/tokeninfra-landing'
 
-async function renderLanding(isAuthenticated = false, docsUrl = '/docs') {
+async function renderLanding(isAuthenticated = false) {
   const route = createRootRoute({
-    component: () => (
-      <TokenInfraLanding isAuthenticated={isAuthenticated} docsUrl={docsUrl} />
-    ),
+    component: () => <TokenInfraLanding isAuthenticated={isAuthenticated} />,
   })
   const router = createRouter({
     routeTree: route,
@@ -62,13 +60,13 @@ afterEach(async () => {
 describe('TokenInfra landing page', () => {
   test('anonymous visitors can reach registration and model pricing', async () => {
     await renderLanding()
-    expect(
-      screen.getAllByRole('link', { name: /Get Started/ })[0]
-    ).toHaveAttribute('href', '/sign-up')
-    expect(screen.getByRole('link', { name: /View Pricing/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Get Started/ })).toHaveAttribute(
       'href',
-      '/pricing'
+      '/sign-up'
     )
+    expect(
+      screen.getByRole('link', { name: /View model pricing/ })
+    ).toHaveAttribute('href', '/pricing')
   })
 
   test('authenticated visitors are sent to the dashboard', async () => {
@@ -83,28 +81,36 @@ describe('TokenInfra landing page', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('documentation opens the local quick start in the same tab', async () => {
+  test('integration docs open the local quick start in the same tab', async () => {
     await renderLanding()
-    const docs = screen.getByRole('link', { name: 'Docs' })
+    const docs = screen.getByRole('link', {
+      name: /Read the integration docs/,
+    })
     expect(docs).toHaveAttribute('href', '/docs')
     expect(docs).not.toHaveAttribute('target', '_blank')
   })
 
-  test('in-page factory navigation has a visible matching section', async () => {
+  test('hero anchor navigation points at the visible models section', async () => {
     await renderLanding()
     expect(
-      screen.getByRole('link', { name: /Explore the token factory/ })
-    ).toHaveAttribute('href', '#token-factory')
+      screen.getByRole('link', { name: /Explore models/ })
+    ).toHaveAttribute('href', '#models')
     expect(
-      screen.getByRole('region', {
-        name: 'One gateway. A complete token factory.',
-      })
-    ).toHaveAttribute('id', 'token-factory')
-    expect(
-      screen.getByRole('img', {
-        name: 'Compute flows through TokenInfra to power AI applications',
-      })
-    ).toBeInTheDocument()
+      screen.getByRole('region', { name: 'One gateway, every model' })
+    ).toHaveAttribute('id', 'models')
+  })
+
+  test('model filters narrow the catalog by capability', async () => {
+    const user = userEvent.setup()
+    await renderLanding()
+    expect(screen.getByRole('link', { name: /Doubao/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Coding' }))
+    expect(screen.queryByRole('link', { name: /Doubao/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /DeepSeek/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'All models' }))
+    expect(screen.getByRole('link', { name: /Doubao/ })).toBeInTheDocument()
   })
 
   test('copying the API example by keyboard reports success', async () => {
@@ -129,7 +135,7 @@ describe('TokenInfra landing page', () => {
     )
   })
 
-  test('switching to Chinese updates the main company message', async () => {
+  test('switching to Chinese updates the main headline', async () => {
     i18next.addResourceBundle('en', 'translation', en.translation, true, true)
     i18next.addResourceBundle('zh', 'translation', zh.translation, true, true)
     await renderLanding()
@@ -137,7 +143,7 @@ describe('TokenInfra landing page', () => {
       await i18next.changeLanguage('zh')
     })
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      '让算力成为生产力'
+      '以至优价格畅享全球模型'
     )
   })
 })
