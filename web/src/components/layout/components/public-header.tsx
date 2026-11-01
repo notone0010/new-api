@@ -30,9 +30,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
-import { DEFAULT_LOGO } from '@/lib/constants'
+import { DEFAULT_LOGO, DEFAULT_LOGO_DARK } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
+import { useTheme } from '@/context/theme-provider'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
@@ -93,11 +94,16 @@ export function PublicHeader(props: PublicHeaderProps) {
   const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
+  const { resolvedTheme } = useTheme()
 
   const user = auth.user
   const isAuthenticated = !!user
   const displaySiteName = customSiteName || systemName
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const displaySystemLogo =
+    systemLogo === DEFAULT_LOGO && resolvedTheme === 'dark'
+      ? DEFAULT_LOGO_DARK
+      : systemLogo
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -208,7 +214,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 {!loading && customLogo}
                 {!loading && !customLogo && (
                   <HeaderLogo
-                    src={systemLogo}
+                    src={displaySystemLogo}
                     loading={loading}
                     logoLoaded={logoLoaded}
                     className='size-full rounded-lg object-contain'

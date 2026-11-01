@@ -190,6 +190,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
+	if responseId != "" {
+		c.Set(common.ResponseIdKey, responseId)
+	}
 
 	return usage, nil
 }
@@ -266,6 +269,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	err = common.Unmarshal(responseBody, &simpleResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	if simpleResponse.Id != "" {
+		c.Set(common.ResponseIdKey, simpleResponse.Id)
+		simpleResponse.Usage.ResponseID = simpleResponse.Id
 	}
 
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {

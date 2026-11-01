@@ -402,6 +402,9 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 }
 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
+	if usage != nil && usage.ResponseID != "" {
+		ctx.Set(common.ResponseIdKey, usage.ResponseID)
+	}
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
 	if usage == nil {
@@ -531,8 +534,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	attachQuotaSaturation(ctx, relayInfo, other)
 	if image := relayInfo.PriceData.ImageBilling; image != nil {
 		image.Quota = summary.Quota
-		other["image_billing"] = image
-		other["billing_mode"] = "per-image"
+		other.SetPublic("image_billing", image)
+		other.SetPublic("billing_mode", "per-image")
 	}
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{

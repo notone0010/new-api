@@ -26,7 +26,12 @@ import {
 } from '@/components/ui/sidebar'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { DEFAULT_LOGO, DEFAULT_LOGO_ICON } from '@/lib/constants'
+import { useTheme } from '@/context/theme-provider'
+import {
+  DEFAULT_LOGO,
+  DEFAULT_LOGO_DARK,
+  DEFAULT_LOGO_ICON,
+} from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 type SystemBrandProps = {
@@ -50,6 +55,9 @@ export function SystemBrand(props: SystemBrandProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
   const { logo } = useSystemConfig()
+  const { resolvedTheme } = useTheme()
+  const displayLogo =
+    logo === DEFAULT_LOGO && resolvedTheme === 'dark' ? DEFAULT_LOGO_DARK : logo
 
   const variant = props.variant ?? 'sidebar'
   const name = status?.system_name || props.defaultName || 'New API'
@@ -75,7 +83,7 @@ export function SystemBrand(props: SystemBrandProps) {
           )}
         >
           <img
-            src={logo}
+            src={displayLogo}
             alt={t('Logo')}
             className='size-full object-contain'
           />
@@ -117,7 +125,7 @@ export function SystemBrand(props: SystemBrandProps) {
           <div className='grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
             {logo === DEFAULT_LOGO ? (
               <img
-                src={logo}
+                src={displayLogo}
                 alt='TokenInfra'
                 className='h-7 w-35 object-contain'
               />

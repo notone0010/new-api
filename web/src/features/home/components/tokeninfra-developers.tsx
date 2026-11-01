@@ -16,53 +16,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ArrowRight, Check, Copy } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ArrowUpRight } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Button } from '@/components/ui/button'
-
-export const TOKENINFRA_PYTHON_EXAMPLE = `from openai import OpenAI
-import os
-
-client = OpenAI(
-    api_key=os.environ["TOKENINFRA_API_KEY"],
-    base_url="https://tokeninfra.com.cn/v1",
-)
-
-response = client.chat.completions.create(
-    model="deepseek-chat",
-    messages=[{"role": "user", "content": "Hello!"}],
-)
-print(response.choices[0].message.content)`
+import { CODE_SAMPLES, type CodeLanguage } from '../lib/code-samples'
 
 export function TokenInfraDevelopers() {
   const { t } = useTranslation()
+  const [language, setLanguage] = useState<CodeLanguage>('Python')
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>(
     'idle'
   )
+
   const steps = [
     {
-      title: t('Configure'),
-      text: t(
-        'Add your API keys, set up channels and configure access permissions'
-      ),
+      title: t('Create an account, get an API key'),
+      text: t('Manage your access keys in the console.'),
     },
     {
-      title: t('Connect'),
-      text: t(
-        'Connect through OpenAI, Claude, Gemini, and other compatible API routes'
-      ),
+      title: t('Configure the endpoint and model'),
+      text: t('Set the base URL and choose a model ID.'),
     },
     {
-      title: t('Monitor'),
-      text: t('Track usage, costs and performance with real-time analytics'),
+      title: t('Start calling and track usage'),
+      text: t('From the first response to continuous iteration.'),
     },
   ]
 
   async function copyExample() {
     try {
-      await navigator.clipboard.writeText(TOKENINFRA_PYTHON_EXAMPLE)
+      await navigator.clipboard.writeText(CODE_SAMPLES[language])
       setCopyState('copied')
     } catch {
       setCopyState('error')
@@ -71,57 +56,69 @@ export function TokenInfraDevelopers() {
 
   return (
     <section
-      className='ti-section ti-developers'
+      className='ti-section ti-developer-section'
       id='developers'
       aria-labelledby='ti-developer-title'
     >
-      <div>
-        <p className='ti-eyebrow'>03 / {t('For developers')}</p>
-        <h2 id='ti-developer-title'>{t('Less integration. More creation.')}</h2>
-        <p className='ti-section-intro'>
-          {t('Keep the SDK you know. Connect to the models you need.')}
-        </p>
+      <div className='ti-developer-copy'>
+        <h2 id='ti-developer-title'>
+          {t('Easy to start')}
+          <br />
+          {t('Make your first call today')}
+        </h2>
         <ol className='ti-steps'>
           {steps.map((step, index) => (
             <li key={step.title}>
-              <span className='ti-step-number'>0{index + 1}</span>
+              <span>0{index + 1}</span>
               <div>
-                <h3>{step.title}</h3>
+                <b>{step.title}</b>
                 <p>{step.text}</p>
               </div>
-              <ArrowRight size={16} aria-hidden='true' />
             </li>
           ))}
         </ol>
+        <Link to='/docs' className='ti-text-link'>
+          {t('Read the integration docs')}
+          <ArrowUpRight size={14} aria-hidden='true' />
+        </Link>
       </div>
-      <div className='ti-code-panel'>
-        <div className='ti-code-toolbar'>
-          <span>
+
+      <div className='ti-code-window'>
+        <div className='ti-code-top'>
+          <span className='ti-code-dots' aria-hidden='true'>
             <i />
             <i />
             <i />
           </span>
-          <span>quickstart.py</span>
-          <Button
-            variant='ghost'
-            size='icon'
-            onClick={copyExample}
-            aria-label={t('Copy code')}
-          >
-            {copyState === 'copied' ? <Check size={16} /> : <Copy size={16} />}
-          </Button>
+          <span>YOUR FIRST REQUEST</span>
+          <button type='button' className='ti-copy' onClick={copyExample}>
+            {t('Copy code')}
+          </button>
+        </div>
+        <div className='ti-code-tabs' role='tablist' aria-label={t('Language')}>
+          {(Object.keys(CODE_SAMPLES) as CodeLanguage[]).map((item) => (
+            <button
+              key={item}
+              type='button'
+              role='tab'
+              aria-selected={item === language}
+              onClick={() => setLanguage(item)}
+            >
+              {item}
+            </button>
+          ))}
         </div>
         <pre tabIndex={0} aria-label={t('API example')}>
-          <code>{TOKENINFRA_PYTHON_EXAMPLE}</code>
+          <code>{CODE_SAMPLES[language]}</code>
         </pre>
-        <div className='ti-code-footnote'>
-          <span>
-            {t('Set your API base URL and choose an available model.')}
-          </span>
+        <div className='ti-code-foot'>
+          <span className='ti-dot' />
+          <span>OpenAI-compatible API</span>
           <span role='status'>
             {copyState === 'copied' && t('Copied')}
             {copyState === 'error' &&
               t('Copy failed. Select and copy the code manually.')}
+            {copyState === 'idle' && '/v1/chat/completions'}
           </span>
         </div>
       </div>
