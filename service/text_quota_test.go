@@ -688,6 +688,32 @@ func TestCalculateTextQuotaSummaryKeepsPrePRClaudeOpenRouterBilling(t *testing.T
 	require.Equal(t, 798, summary.Quota)
 }
 
+func TestLogPromptTokensForSummaryNormalizesClaudeCache(t *testing.T) {
+	// Claude reports input separately from cache read/write, so the log stores
+	// the OpenAI-style total: 172 + 2432 + 100.
+	claudeSummary := textQuotaSummary{
+		IsClaudeUsageSemantic: true,
+		PromptTokens:          172,
+		CacheTokens:           2432,
+		CacheCreationTokens:   100,
+	}
+	require.Equal(t, 2704, logPromptTokensForSummary(claudeSummary))
+
+	// Split cache creation counts are used when the aggregate total is absent.
+	splitCreationSummary := textQuotaSummary{
+		IsClaudeUsageSemantic: true,
+		PromptTokens:          100,
+		CacheTokens:           30,
+		CacheCreationTokens5m: 40,
+		CacheCreationTokens1h: 50,
+	}
+	require.Equal(t, 220, logPromptTokensForSummary(splitCreationSummary))
+
+	// OpenAI-style prompt totals already include cache, so nothing is added.
+	openAISummary := textQuotaSummary{PromptTokens: 2604, CacheTokens: 2432}
+	require.Equal(t, 2604, logPromptTokensForSummary(openAISummary))
+}
+
 func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

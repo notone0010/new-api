@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,67 +16,17 @@ import (
 	"gorm.io/gorm"
 )
 
-func totalTokensFromUsage(promptTokens, completionTokens int, other map[string]interface{}) int {
-	total := promptTokens + completionTokens
-	for _, key := range []string{"cache_tokens", "cache_write_tokens"} {
-		if value, ok := other[key]; ok {
-			switch number := value.(type) {
-			case int:
-				total += number
-			case int64:
-				total += int(number)
-			case float64:
-				total += int(number)
-			case string:
-				if parsed, err := strconv.Atoi(number); err == nil {
-					total += parsed
-				}
-			}
-		}
-	}
-	if _, ok := other["cache_write_tokens"]; !ok {
-		keys := []string{"cache_creation_tokens"}
-		if _, hasTotal := other["cache_creation_tokens"]; !hasTotal {
-			keys = []string{"cache_creation_tokens_5m", "cache_creation_tokens_1h"}
-		}
-		for _, key := range keys {
-			if value, ok := other[key]; ok {
-				switch number := value.(type) {
-				case int:
-					total += number
-				case int64:
-					total += int(number)
-				case float64:
-					total += int(number)
-				case string:
-					if parsed, err := strconv.Atoi(number); err == nil {
-						total += parsed
-					}
-				}
-			}
-		}
-	}
-	return total
+// totalTokensFromUsage counts the full token usage of one log row.
+// prompt_tokens already carries cache reads and cache writes: the consume log
+// normalizes Claude usage (which reports input, cache read and cache write
+// separately) to the OpenAI-style total. Do not add the cache fields in
+// other again, or the same tokens get counted twice.
+func totalTokensFromUsage(promptTokens, completionTokens int) int {
+	return promptTokens + completionTokens
 }
 
 func totalTokensSQLExpression() string {
-	cacheRead := "0"
-	cacheWrite := "0"
-	switch {
-	case common.UsingLogDatabase(common.DatabaseTypeMySQL):
-		cacheRead = "CASE WHEN JSON_VALID(other) THEN COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_tokens')) AS UNSIGNED), 0) ELSE 0 END"
-		cacheWrite = "CASE WHEN JSON_VALID(other) THEN COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_write_tokens')) AS UNSIGNED), CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_creation_tokens')) AS UNSIGNED), COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_creation_tokens_5m')) AS UNSIGNED), 0) + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.cache_creation_tokens_1h')) AS UNSIGNED), 0), 0) ELSE 0 END"
-	case common.UsingLogDatabase(common.DatabaseTypePostgreSQL):
-		cacheRead = "COALESCE(NULLIF(other::jsonb->>'cache_tokens', '')::bigint, 0)"
-		cacheWrite = "COALESCE(NULLIF(other::jsonb->>'cache_write_tokens', '')::bigint, 0)"
-	case common.UsingLogDatabase(common.DatabaseTypeSQLite):
-		cacheRead = "COALESCE(CAST(json_extract(other, '$.cache_tokens') AS INTEGER), 0)"
-		cacheWrite = "COALESCE(CAST(json_extract(other, '$.cache_write_tokens') AS INTEGER), 0)"
-	case common.UsingLogDatabase(common.DatabaseTypeClickHouse):
-		cacheRead = "JSONExtractInt(other, 'cache_tokens')"
-		cacheWrite = "JSONExtractInt(other, 'cache_write_tokens')"
-	}
-	return "COALESCE(SUM(prompt_tokens + completion_tokens + " + cacheRead + " + " + cacheWrite + "), 0)"
+	return "COALESCE(SUM(prompt_tokens + completion_tokens), 0)"
 }
 
 func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
@@ -457,7 +406,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			ModelName: params.ModelName,
 			Quota:     params.Quota,
 			CreatedAt: createdAt,
-			TokenUsed: totalTokensFromUsage(params.PromptTokens, params.CompletionTokens, params.Other.Snapshot()),
+			TokenUsed: totalTokensFromUsage(params.PromptTokens, params.CompletionTokens),
 			UseGroup:  params.Group,
 			TokenID:   params.TokenId,
 			ChannelID: params.ChannelId,
