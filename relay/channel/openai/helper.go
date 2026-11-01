@@ -171,7 +171,9 @@ func handleLastResponse(lastStreamData string, responseId *string, createAt *int
 		return err
 	}
 
-	*responseId = lastStreamResponse.Id
+	if lastStreamResponse.Id != "" {
+		*responseId = lastStreamResponse.Id
+	}
 	*createAt = lastStreamResponse.Created
 	*systemFingerprint = lastStreamResponse.GetSystemFingerprint()
 	*model = lastStreamResponse.Model

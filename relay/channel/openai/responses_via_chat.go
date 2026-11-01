@@ -35,8 +35,8 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
-	if responseID := helper.GetResponseID(c); responseID != "" {
-		chatResp.Id = responseID
+	if chatResp.Id == "" {
+		chatResp.Id = helper.GetResponseID(c)
 	}
 	convertResult, err := service.ConvertResponse(c, info, types.RelayFormatOpenAIResponses, &chatResp)
 	if err != nil {
@@ -59,6 +59,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
+	helper.RecordResponseID(c, usage, chatResp.Id)
 	return usage, nil
 }
 
@@ -139,6 +140,9 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			sr.Stop(streamErr)
 			return
 		}
+		if chunk.Id != "" {
+			responseID = chunk.Id
+		}
 
 		results, err := service.ConvertStreamResponseChunk(c, info, state, &chunk)
 		if err != nil {
@@ -190,6 +194,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return nil, streamErr
 		}
 	}
+	helper.RecordResponseID(c, usage, responseID)
 
 	return usage, nil
 }

@@ -171,7 +171,20 @@ func WssError(c *gin.Context, ws *websocket.Conn, openaiError types.OpenAIError)
 	_ = WssObject(c, ws, errorObj)
 }
 
+func RecordResponseID(c *gin.Context, usage *dto.Usage, responseID string) {
+	if responseID == "" {
+		return
+	}
+	c.Set(common.ResponseIdKey, responseID)
+	if usage != nil {
+		usage.ResponseID = responseID
+	}
+}
+
 func GetResponseID(c *gin.Context) string {
+	if responseID := c.GetString(common.ResponseIdKey); responseID != "" {
+		return responseID
+	}
 	logID := c.GetString(common.RequestIdKey)
 	responseID := fmt.Sprintf("chatcmpl-%s", logID)
 	c.Set(common.ResponseIdKey, responseID)

@@ -94,10 +94,11 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
-	if claudeResponse.Id != "" {
-		c.Set(common.ResponseIdKey, claudeResponse.Id)
-		claudeInfo.Usage.ResponseID = claudeResponse.Id
+	responseID := claudeResponse.Id
+	if claudeResponse.Message != nil && claudeResponse.Message.Id != "" {
+		responseID = claudeResponse.Message.Id
 	}
+	helper.RecordResponseID(c, claudeInfo.Usage, responseID)
 	if claudeResponse.StopReason != "" {
 		maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	}

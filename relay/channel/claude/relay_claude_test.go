@@ -1,15 +1,19 @@
 package claude
 
 import (
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,6 +102,78 @@ func TestFormatClaudeResponseInfo_MessageStart(t *testing.T) {
 	if claudeInfo.Model != "claude-3-5-sonnet" {
 		t.Errorf("Model = %s, want claude-3-5-sonnet", claudeInfo.Model)
 	}
+}
+
+func TestHandleStreamResponseDataRecordsMessageStartResponseID(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Set(common.RequestIdKey, "req-claude-stream")
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "claude-test"},
+		RelayFormat: types.RelayFormatClaude,
+	}
+	claudeInfo := &ClaudeResponseInfo{
+		ResponseId: helper.GetResponseID(c),
+		Usage:      &dto.Usage{},
+	}
+
+	apiErr := HandleStreamResponseData(c, info, claudeInfo, `{"type":"message_start","message":{"id":"msg_stream","model":"claude-test","usage":{"input_tokens":1,"output_tokens":0}}}`)
+	require.Nil(t, apiErr)
+	assert.Equal(t, "msg_stream", claudeInfo.Usage.ResponseID)
+	assert.Equal(t, "msg_stream", c.GetString(common.ResponseIdKey))
+}
+
+func TestClaudeHandlerRecordsNonStreamResponseID(t *testing.T) {
+	body := `{"id":"msg_nonstream","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Set(common.RequestIdKey, "req-claude-nonstream")
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "claude-test"},
+		RelayFormat: types.RelayFormatClaude,
+	}
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}
+
+	usage, apiErr := ClaudeHandler(c, resp, info)
+	require.Nil(t, apiErr)
+	assert.Equal(t, "msg_nonstream", usage.ResponseID)
+	assert.Equal(t, "msg_nonstream", c.GetString(common.ResponseIdKey))
+}
+
+func TestClaudeResponsesStreamHandlerRecordsMessageStartResponseID(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"message_start","message":{"id":"msg_responses_stream","model":"claude-test","usage":{"input_tokens":1,"output_tokens":0}}}`,
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
+		`data: {"type":"message_stop"}`,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "req-claude-responses-stream")
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "claude-test"},
+		RelayFormat: types.RelayFormatOpenAIResponses,
+	}
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	usage, apiErr := ClaudeResponsesStreamHandler(c, resp, info)
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	assert.Equal(t, "msg_responses_stream", usage.ResponseID)
+	assert.Equal(t, "msg_responses_stream", c.GetString(common.ResponseIdKey))
 }
 
 func TestFormatClaudeResponseInfo_MessageDelta_FullUsage(t *testing.T) {
