@@ -87,6 +87,19 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 	return summary.CacheCreationTokens
 }
 
+// logPromptTokensForSummary returns the prompt token value written to the
+// consume log. Claude usage reports input, cache read and cache write
+// separately while OpenAI-style prompt totals already include both, so Claude
+// rows are normalized to the OpenAI shape. That keeps
+// prompt_tokens + completion_tokens equal to the full usage on every path.
+// Billing keeps using the split summary fields and is unaffected.
+func logPromptTokensForSummary(summary textQuotaSummary) int {
+	if summary.IsClaudeUsageSemantic {
+		return summary.PromptTokens + summary.CacheTokens + cacheWriteTokensTotal(summary)
+	}
+	return summary.PromptTokens
+}
+
 func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
 	if relayInfo == nil || usage == nil {
 		return false
@@ -540,7 +553,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
-		PromptTokens:     summary.PromptTokens,
+		PromptTokens:     logPromptTokensForSummary(summary),
 		CompletionTokens: summary.CompletionTokens,
 		ModelName:        logModel,
 		TokenName:        summary.TokenName,

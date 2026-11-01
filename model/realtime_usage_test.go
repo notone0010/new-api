@@ -18,9 +18,12 @@ func TestRealtimeUsageParamsValidation(t *testing.T) {
 
 func TestAggregateRealtimeUsageCacheTrendAndErrors(t *testing.T) {
 	now := int64(1_700_000_000)
+	// prompt_tokens is stored with cache reads/writes already folded in (see
+	// logPromptTokensForSummary), so the cache fields in other must not be
+	// counted a second time here.
 	logs := []*Log{
-		{UserId: 1, Username: "alice", Type: LogTypeConsume, CreatedAt: now - 10, PromptTokens: 10, CompletionTokens: 5, Other: `{"cache_tokens":"3","cache_write_tokens":2}`},
-		{UserId: 1, Username: "alice", Type: LogTypeConsume, CreatedAt: now - 70, PromptTokens: 2, CompletionTokens: 1, Other: `{"cache_creation_tokens_5m":4,"cache_creation_tokens_1h":5,"status":"error"}`},
+		{UserId: 1, Username: "alice", Type: LogTypeConsume, CreatedAt: now - 10, PromptTokens: 15, CompletionTokens: 5, Other: `{"cache_tokens":"3","cache_write_tokens":2}`},
+		{UserId: 1, Username: "alice", Type: LogTypeConsume, CreatedAt: now - 70, PromptTokens: 11, CompletionTokens: 1, Other: `{"cache_creation_tokens_5m":4,"cache_creation_tokens_1h":5,"status":"error"}`},
 		{UserId: 2, Username: "bob", Type: LogTypeConsume, CreatedAt: now - 400, PromptTokens: 99},
 	}
 	got, err := AggregateRealtimeUsage(logs, now, RealtimeUsageParams{WindowSeconds: 120, TrendMinutes: 5, Limit: 5})

@@ -132,7 +132,7 @@ func AggregateRealtimeUsage(logs []*Log, now int64, p RealtimeUsageParams) (Real
 		}
 		inSummary := log.CreatedAt >= windowCutoff
 		other, _ := common.StrToMap(log.Other)
-		tokens := totalTokensFromUsage(log.PromptTokens, log.CompletionTokens, other)
+		tokens := totalTokensFromUsage(log.PromptTokens, log.CompletionTokens)
 		errLog := realtimeLogError(log, other)
 		if !inSummary {
 			// Older records only feed the trend buckets.
